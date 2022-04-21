@@ -31,10 +31,10 @@ function main()
     area = v->4*pi*r(v)^2
     kernel_func = x -> a + b*(x[1]+x[2]) + c*(r(x[1])+r(x[2]))^2*abs(area(x[1])-area(x[2]))
     tracked_moments = [1.0]
-    inject_rate = 1
-    N     = 100           # initial droplet density: number per cm^3
+    inject_rate = 1.0
+    N     = 0             # initial droplet density: number per cm^3
     θ_v   = 100           # volume scale factor: µm^3
-    θ_v_in= 50            # volume scale factor: μm
+    θ_v_in= 100           # volume scale factor: μm
     k     = 3             # shape factor for particle size distribution 
 
     # initial/injection distribution in volume: gamma distribution in radius, number per cm^3
@@ -65,9 +65,9 @@ function main()
 
     # Precomputation
     A = get_rbf_inner_products(basis, rbf_loc, tracked_moments)
-    Source = get_kernel_rbf_source(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin)
-    Sink = get_kernel_rbf_sink_precip(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=vmax)
-    (c_inject, Inject) = get_basis_projection(basis, rbf_loc, A, tracked_moments, inject_rate_fn, vmax)
+    Source = get_kernel_rbf_source(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=v_cutoff)
+    Sink = get_kernel_rbf_sink_precip(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=v_cutoff)
+    (c_inject, Inject) = get_basis_projection(basis, rbf_loc, A, tracked_moments, inject_rate_fn, v_cutoff)
     J = get_mass_cons_term(basis, xstart = vmin, xstop = vmax)
 
     # INITIAL CONDITION
@@ -85,13 +85,13 @@ function main()
     t_coll = sol.t
 
     # track the moments
-    basis_mom = vcat(get_moment(basis, 0.0, xstart=vmin, xstop=vmax)', get_moment(basis, 1.0, xstart=vmin, xstop=vmax)', get_moment(basis, 2.0, xstart=vmin, xstop=vmax)')
+    basis_mom_withsink = vcat(get_moment(basis, 0.0, xstart=vmin, xstop=v_cutoff)', get_moment(basis, 1.0, xstart=vmin, xstop=v_cutoff)', get_moment(basis, 2.0, xstart=vmin, xstop=v_cutoff)')
     c_coll = zeros(FT, length(t_coll), Nb)
     for (i,t) in enumerate(t_coll)
       nj_t = sol(t)
       c_coll[i,:] = get_constants_vec(nj_t, A)
     end
-    mom_coll = c_coll*basis_mom'
+    mom_coll = c_coll*basis_mom_withsink'
     println("times = ", t_coll)
     println("c_init = ", c_coll[1,:])
     println("c_final = ", c_coll[end,:])
