@@ -27,7 +27,9 @@ function main()
     a = 1e-4
     b = 0.0
     c = 0.0
-    kernel_func = x -> a + b*(x[1]+x[2]) + c*abs(x[1]^(2/3)-x[2]^(2/3))/vmax^(2/3)*(x[1]^(1/3)+x[2]^(1/3))^2
+    r = v->(3/4/pi*v)^(1/3)
+    area = v->4*pi*r(v)^2
+    kernel_func = x -> a + b*(x[1]+x[2]) + c*(r(x[1])+r(x[2]))^2*abs(area(x[1])-area(x[2]))
     tracked_moments = [1.0]
     inject_rate = 0
     N     = 100           # initial droplet density: number per cm^3

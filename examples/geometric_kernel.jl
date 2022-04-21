@@ -1,22 +1,21 @@
-""" collision-coalescence only with constant kernel """
+""" collision-coalescence only with geometric kernel """
 
 using Plots
 using RBFCloud.BasisFunctions
 using RBFCloud.MomentCollocation
-#using QuadGK
 using SpecialFunctions: gamma
 using DifferentialEquations
 
 function main()
     ############################ SETUP ###################################
-    casename = "geometric/8_"
+    casename = "examples/geometric_16_"
 
     # Numerical parameters
     FT = Float64
     tspan = (0.0, 360.0)
 
     # basis setup 
-    Nb = 8
+    Nb = 16
     rmax  = 50.0
     rmin  = 1.0
     vmin = 8*rmin^3
@@ -34,14 +33,13 @@ function main()
     tracked_moments = [1.0]
     inject_rate = 0
     N     = 100           # initial droplet density: number per cm^3
-    θ_v   = 100            # volume scale factor: µm^3
+    θ_v   = 100           # volume scale factor: µm^3
     θ_r   = 3             # radius scale factor: µm
     k     = 3             # shape factor for particle size distribution 
     ρ_w   = 1.0e-12       # density of droplets: 1 g/µm^3
 
     # initial/injection distribution in volume: gamma distribution in radius, number per cm^3
     r = v->(3/4/pi*v)^(1/3)
-    #n_v_init = v -> N*(r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
     n_v_init = v -> N*v^(k-1)/θ_v^k * exp(-v/θ_v) / gamma(k)
     n_v_inject = v -> (r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
     
@@ -57,8 +55,6 @@ function main()
     end
     println("means = ", rbf_loc)
     println("stddevs = ", rbf_shapes)
-    #println(basis)
-    #plot_basis(basis, xstart=vmin*0.1, xstop=vmax)
     rbf_loc = exp.(rbf_loc)
 
     # Injection rate
@@ -67,23 +63,16 @@ function main()
       return f
     end
     ########################### PRECOMPUTATION ################################
-    v_start = 0.0
-    v_stop = vmax
 
     # Precomputation
     A = get_rbf_inner_products(basis, rbf_loc, tracked_moments)
     Source = get_kernel_rbf_source(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin)
     Sink = get_kernel_rbf_sink_precip(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=vmax)
-    #Sink = get_kernel_rbf_sink(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=vmax)
-    #Inject = get_injection_source(rbf_loc, tracked_moments, inject_rate_fn)
     (c_inject, Inject) = get_basis_projection(basis, rbf_loc, A, tracked_moments, inject_rate_fn, vmax)
     J = get_mass_cons_term(basis, xstart = vmin, xstop = vmax)
-    m_inject = sum(c_inject .* J)
 
     # INITIAL CONDITION
-    #(c0, nj_init) = get_IC_vecs(dist_init, basis, rbf_loc, A, tracked_moments)
     (c0, nj_init) = get_basis_projection(basis, rbf_loc, A, tracked_moments, n_v_init, vmax)
-    m_init = sum(c0 .* J)
     println("precomputation complete")
 
     ########################### DYNAMICS ################################
@@ -94,8 +83,6 @@ function main()
 
     prob = ODEProblem(dndt, nj_init, tspan)
     sol = solve(prob)
-    #println(sol)
-
     t_coll = sol.t
 
     # track the moments
@@ -106,7 +93,6 @@ function main()
       c_coll[i,:] = get_constants_vec(nj_t, A)
     end
     mom_coll = c_coll*basis_mom'
-    moments_init = mom_coll[1,:]
     println("times = ", t_coll)
     println("c_init = ", c_coll[1,:])
     println("c_final = ", c_coll[end,:])
@@ -128,7 +114,7 @@ function main()
     plot_precip(t_precip, m_precip, v_cutoff, casename = casename)
 
     # output results to file
-    open(string("rbf_paper/",casename,"results.txt"),"w") do file
+    open(string(casename,"results.txt"),"w") do file
       write(file, string("means = ", rbf_loc,"\n"))
       write(file,string("stddevs = ", rbf_shapes,"\n"))
       write(file,"")
@@ -148,22 +134,6 @@ end
 
 """ Plot Initial distribution only """
 function plot_init()
-  # often plotted g(ln r) = 3x^2*n(x,t); mass per m^3 per unit log r
-  g_lnr_init = r-> 3*(4*pi/3*r^3)^2*n_v_init(4*pi/3*r^3)*ρ_w
-
-  # PLOT INITIAL MASS DISTRIBUTION: should look similar to Fig 10 from Long 1974
-  r_plot = collect(range(0, stop=50.0, length=100))
-  plot(r_plot, 
-      g_lnr_init.(r_plot),
-      linewidth=2,
-      title="Initial distribution",
-      ylabel="mass [gram /m^3 / unit log(r)",
-      xaxis="r (µm)",
-      xlim=[6, 25]
-    )
-  savefig("rbf_paper/initial_dist.png")
-
-  # PLOT INITIAL DISTRIBUTION: should look similar to Tzivion 1987 fig 1
   r_plot = collect(range(0, stop=100.0, length=100))
   plot(r_plot, 
       n_v_init.(r_plot.^3*4*pi/3),
@@ -175,7 +145,7 @@ function plot_init()
       ylim=[1e-2, 1e4],
       xaxis=:log
     )
-  savefig("rbf_paper/initial_dist.png")
+  savefig("initial_dist.png")
 end
 
 """ Plot the n(v) result, with option to show exact I.C. and log or linear scale """
@@ -214,7 +184,7 @@ function plot_nv_result(vmin::FT, vmax::FT, basis::Array{CompactBasisFunc, 1}, t
     end
   end
 
-  savefig(string("rbf_paper/",casename,"nv.png"))
+  savefig(string(casename,"nv.png"))
 end
 
 
@@ -250,7 +220,7 @@ function plot_nr_result(rmin::FT, rmax::FT, basis::Array{CompactBasisFunc, 1}, t
             ylim=[1e-2, 1e0], legend=:topright)
     end
   end
-  savefig(string("rbf_paper/",casename,"nr.png"))
+  savefig(string(casename,"nr.png"))
 end
 
 """ Plot the moments supplied over time """
@@ -268,11 +238,11 @@ function plot_moments(tsteps::Array{FT}, moments::Array{FT, 2}; casename::String
           xlabel="time, sec",
           ylabel=string("M_",i-1),
           label=string("M_",i-1))
-    savefig(string("rbf_paper/",casename,"M_",i-1,".png"))
+    savefig(string(casename,"M_",i-1,".png"))
   end
 end
 
-""" Plot the moments supplied over time """
+""" Plot the precipitable portion supplied over time """
 function plot_precip(t_precip::Array{FT}, m_precip::Array{FT}, v_cutoff::FT; casename::String="") where {FT <: Real}
   plot(t_precip,
         m_precip,
@@ -280,7 +250,7 @@ function plot_precip(t_precip::Array{FT}, m_precip::Array{FT}, v_cutoff::FT; cas
         xlabel="time, sec",
         ylabel="μm^3 / cm^3",
         label="precip mass")
-  savefig(string("rbf_paper/",casename,"precip_",v_cutoff,".png"))
+  savefig(string(casename,"precip_",v_cutoff,".png"))
 end
 
 @time main()

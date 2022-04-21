@@ -1,4 +1,4 @@
-""" collision-coalescence only with constant kernel """
+""" collision-coalescence only with golovin kernel """
 
 using Plots
 using RBFCloud.BasisFunctions
@@ -8,11 +8,11 @@ using DifferentialEquations
 
 function main()
     ############################ SETUP ###################################
-    casename = "examples/geometric_16_"
+    casename = "examples/golovin_inject_remove_16"
 
     # Numerical parameters
     FT = Float64
-    tspan = (0.0, 360.0)
+    tspan = (0.0, 4*3600.0)
 
     # basis setup 
     Nb = 16
@@ -24,23 +24,23 @@ function main()
     v_cutoff = 1e3
 
     # Physical parameters: Kernel
-    a = 1e-4
-    b = 0.0
-    c = 0.0
-    kernel_func = x -> a + b*(x[1]+x[2]) + c*abs(x[1]^(2/3)-x[2]^(2/3))/vmax^(2/3)*(x[1]^(1/3)+x[2]^(1/3))^2
+    a = 0.0
+    b = 1500 * 1e-12
+    c = 0.0    
+    r = v->(3/4/pi*v)^(1/3)
+    area = v->4*pi*r(v)^2
+    kernel_func = x -> a + b*(x[1]+x[2]) + c*(r(x[1])+r(x[2]))^2*abs(area(x[1])-area(x[2]))
     tracked_moments = [1.0]
-    inject_rate = 0
+    inject_rate = 1
     N     = 100           # initial droplet density: number per cm^3
     θ_v   = 100           # volume scale factor: µm^3
-    θ_r   = 3             # radius scale factor: µm
+    θ_v_in= 50            # volume scale factor: μm
     k     = 3             # shape factor for particle size distribution 
-    ρ_w   = 1.0e-12       # density of droplets: 1 g/µm^3
 
     # initial/injection distribution in volume: gamma distribution in radius, number per cm^3
     r = v->(3/4/pi*v)^(1/3)
-    #n_v_init = v -> N*(r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
     n_v_init = v -> N*v^(k-1)/θ_v^k * exp(-v/θ_v) / gamma(k)
-    n_v_inject = v -> (r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
+    n_v_inject = v -> v^(k-1)/θ_v_in^k * exp(-v/θ_v_in) / gamma(k)
     
     # lin-spaced log compact rbf
     basis = Array{CompactBasisFunc}(undef, Nb)
