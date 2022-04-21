@@ -6,6 +6,9 @@ using LinearAlgebra
 using Convex
 using SCS
 using NonNegLeastSquares
+using MathOptInterface
+
+const MOI = MathOptInterface
 
 export select_rbf_locs
 export select_rbf_shapes
@@ -343,7 +346,9 @@ function get_constants_vec(nj::Array{FT, 1}, A::Array{FT}, J::Array{FT,1}, mass:
     constraint1 = x >= 0
     constraint2 = J'*x == mass
     problem = minimize(objective, constraint1, constraint2)
-    solve!(problem, SCS.Optimizer(verbose=false), verbose=false)
+    optimizer = SCS.Optimizer()
+    MOI.set(optimizer, MOI.Silent(), true)
+    solve!(problem, optimizer, verbose=false)
     c = x.value
 
     return c[:,1]
