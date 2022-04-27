@@ -14,6 +14,7 @@ export GammaBasisFunction
 export CompactBasisFunction1
 export CompactBasisFunctionUneven
 export CompactBasisFunctionLog
+export PiecewiseConstant
 export basis_func
 export evaluate_rbf
 export get_moment
@@ -148,7 +149,7 @@ struct CompactBasisFunctionUneven{FT} <: CompactBasisFunc{FT}
 end
 
 """
-   CompactBasisFunction{FT}
+   CompactBasisFunctionLog{FT}
 
 A compactly supported basis function of degree 7, which is twice differentiable
 """
@@ -164,6 +165,31 @@ struct CompactBasisFunctionLog{FT} <: CompactBasisFunc{FT}
         end
       
         new{FT}(μ, θ)
+    end
+end
+
+
+"""
+   CompactBasisFunction{FT}
+
+A piecewise constant basis function
+"""
+struct PiecewiseConstant{FT} <: CompactBasisFunc{FT}
+    "mean/center"
+    μ::FT
+    "scale parameter"
+    θL::FT
+    "scale parameter"
+    θR::FT
+
+    function PiecewiseConstant(μ::FT, θL::FT, θR::FT) where {FT <: Real}
+        if θL <= 0
+          error("θL needs to be positive")
+        elseif θR <= 0
+          error("θR needs to be positive")
+        end
+      
+        new{FT}(μ, θL, θR)
     end
 end
 
@@ -259,6 +285,19 @@ function basis_func(rbf::CompactBasisFunctionLog{FT}) where {FT <: Real}
     end
   end
   g = x -> f(μ,θ,x)
+  return g
+end
+
+function basis_func(rbf::PiecewiseConstant{FT}) where {FT <: Real}
+  (x1, x2) = get_support(rbf)
+  function f(x1, x2, x)
+    if x < x2 && x > x1
+      1.0
+    else
+      0.0
+    end
+  end
+  g = x-> f(x1,x2,x)
   return g
 end
 
@@ -373,6 +412,14 @@ function get_support(rbf::CompactBasisFunctionLog{FT}) where {FT <: Real}
   xmin = exp(μ - θ)
   xmax = exp(μ + θ)
   return (xmin, xmax)
+end
+
+function get_support(rbf::PiecewiseConstant{FT}) where {FT <: Real}
+  params = get_params(rbf)[2]
+  μ = params[1]
+  θL = params[2]
+  θR = params[3]
+  return (μ - θL, μ + θR)
 end
 
 function get_support(rbf::CompactBasisFunction1{FT}) where {FT <: Real}
