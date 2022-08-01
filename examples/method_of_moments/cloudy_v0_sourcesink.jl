@@ -11,18 +11,19 @@ using Cloudy.Sources
 
 function main()
   ############################ SETUP ###################################
-  casename = "golovin/16_"
-  v_cutoff = 1e3
+  casename = "examples/method_of_moments/sourcesink"
+  r_cutoff = 25
+  v_cutoff = 4/3*pi*r_cutoff^3
 
   # Numerical parameters
   FT = Float64
-  tspan = (0.0, 4*3600.0)
+  tspan = (0.0, 2*3600.0)
   tol = 1e-8
 
-  rmax  = 50.0
-  rmin  = 1.0
-  vmin = 8*rmin^3
-  vmax = rmax^3
+  rmax  = 200.0
+  rmin  = 2.0
+  vmin = 4/3*pi*rmin^3
+  vmax = 4/3*pi*rmax^3
 
   # Physical parameters: Kernel
   a = 0.0
@@ -32,18 +33,16 @@ function main()
   kernel = CoalescenceTensor(kernel_func, 1, 100.0)
 
   # Initial condition
-  θ_v_1 = 100.0
-  N_1   = 100.0
-  k_1   = 4.0
-  θ_v_2 = 15.0
-  N_2   = 100.0
-  k_2   = 2.0
-  moments_init = [N_1 + N_2, N_1*θ_v_1*k_1+N_2*θ_v_2*k_2, N_1*(k_1+1)*k_1*θ_v_1^2+N_2*(k_2+1)*k_2*θ_v_2^2]
-  #dist1 = GammaPrimitiveParticleDistribution(N_1, θ_v_1, k_1)
-  #dist2 = GammaPrimitiveParticleDistribution(N_2, θ_v_2, k_2)
-  #dist_init = AdditiveParticleDistribution(dist1, dist2)
-  dist_init = GammaPrimitiveParticleDistribution(N_1, θ_v_1, k_1)
+  N     = 100.0           # initial droplet density: number per cm^3
+  θ_v   = 200.0            # volume scale factor: µm
+  k     = 2.0             # shape factor for particle size distribution 
+  inject_rate = 1.0
+  moments_init = [0.0, 0.0, 0.0]
+  dist_init = GammaPrimitiveParticleDistribution(0.0, θ_v, k)
 
+  open(string(casename,"results.txt"),"w") do file
+    write(file,string("initial N, k, theta = ", N,", ", k,", ", θ_v,", ","\n"))
+  end
   # Set up the ODE problem
   # Step 1) Define termination criterion: stop integration when one of the 
   #         distribution parameters leaves its allowed domain (which can 
@@ -93,7 +92,16 @@ function main()
   cb = DiscreteCallback(condition, affect!)
 
   # Step 2) Set up the right hand side of ODE
-  rhs(m, par, t) = get_int_coalescence(m, par, kernel)
+  function source(m, par, inject_rate, k_in, θ_in)
+    m0_in = inject_rate
+    m1_in = inject_rate*k_in*θ_in
+    m2_in = inject_rate*k_in*(k_in+1)*θ_in^2    
+
+    source_int = [m0_in, m1_in, m2_in]
+    return source_int
+  end
+
+  rhs(m, par, t) = source(m, par, inject_rate, k, θ_v) + get_int_coalescence(m, par, kernel)
 
   # Make the initial distribution a parameter of the ODE, so that it can get 
   # updated and carried along over the entire integration time.
@@ -107,6 +115,7 @@ function main()
   moment_0 = vcat(sol.u'...)[:, 1]
   moment_1 = vcat(sol.u'...)[:, 2]
   moment_2 = vcat(sol.u'...)[:, 3]
+  
   print("t_cloudy=",time,"\n")
   print("M0_cloudy=",moment_0,"\n")
   print("M1_cloudy=",moment_1,"\n")
@@ -129,6 +138,24 @@ function main()
   end
   println("t_precip = ",t_precip)
   println("v_precip = ",m_precip)
+
+  # output results to file
+  m_end = sol(tspan[end])
+  M0 = m_end[1]
+  M1 = m_end[2]
+  M2 = m_end[3]
+  n = M0
+  k = -M1^2/(M1^2-M0*M2)
+  θ = -(M1^2 - M0*M2)/(M0*M1)
+  open(string(casename,"results.txt"),"a") do file
+    write(file,string("final N, k, theta = ", n,", ", k,", ", θ,", ","\n"))
+    write(file,string("t_cloudy = ", time,"\n"))
+    write(file,string("M0_cloudy = ", moment_0,"\n"))
+    write(file,string("M1_cloudy = ", moment_1,"\n"))
+    write(file,string("M2_cloudy = ", moment_2,"\n"))
+    write(file,string("t_precip = ", t_precip,"\n"))
+    write(file,string("m_precip = ", m_precip,"\n"))
+  end
 
 end
 

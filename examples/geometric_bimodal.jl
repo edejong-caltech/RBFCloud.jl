@@ -8,15 +8,15 @@ using DifferentialEquations
 
 function main()
     ############################ SETUP ###################################
-    casename = "examples/golovin32_inject_remove_smallerrange"
+    casename = "examples/geometric8_bimodal"
 
     # Numerical parameters
     FT = Float64
-    tspan = (0.0, 2*3600.0)
+    tspan = (0.0, 4*3600.0)
 
     # basis setup 
-    Nb = 16
-    rmax  = 25.0 #200.0
+    Nb = 8
+    rmax  = 200.0
     rmin  = 2.0
     vmin = 4/3*pi*rmin^3
     vmax = 4/3*pi*rmax^3
@@ -26,22 +26,30 @@ function main()
 
     # Physical parameters: Kernel
     a = 0.0
-    b = 1500 * 1e-12
-    c = 0.0    
+    b = 0.0
+    c = pi * 1e-12   
     r = v->(3/4/pi*v)^(1/3)
     area = v->4*pi*r(v)^2
     kernel_func = x -> a + b*(x[1]+x[2]) + c*(r(x[1])+r(x[2]))^2*abs(area(x[1])-area(x[2]))
     tracked_moments = [1.0]
-    inject_rate = 1.0
-    N     = 0             # initial droplet density: number per cm^3
-    θ_v   = 1000           # volume scale factor: µm^3
-    θ_v_in= 200           # volume scale factor: μm
-    k     = 2             # shape factor for particle size distribution 
-
+    inject_rate = 0
+    θ_r   = 3             # radius scale factor: µm
+    k     = 3             # shape factor for particle size distribution 
+  
     # initial/injection distribution in volume: gamma distribution in radius, number per cm^3
+    #### INITIAL DISTRIBUTION: TWO MODES ####
+    θ_v_1 = 1000.0
+    N_1   = 10.0
+    k_1   = 4
+    θ_v_2 = 200.0
+    N_2   = 100.0
+    k_2   = 2
     r = v->(3/4/pi*v)^(1/3)
-    n_v_init = v -> N*v^(k-1)/θ_v^k * exp(-v/θ_v) / gamma(k)
-    n_v_inject = v -> v^(k-1)/θ_v_in^k * exp(-v/θ_v_in) / gamma(k)
+    mode1_v = v -> N_1*v^(k_1-1)/θ_v_1^k_1 * exp(-v/θ_v_1) / gamma(k_1)
+    mode2_v = v -> N_2*v^(k_2-1)/θ_v_2^k_2 * exp(-v/θ_v_2) / gamma(k_2)
+    n_v_init = v->(mode1_v(v) + mode2_v(v))
+    
+    n_v_inject = v -> (r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
     
     # lin-spaced log compact rbf
     basis = Array{CompactBasisFunc}(undef, Nb)
@@ -65,11 +73,10 @@ function main()
     ########################### PRECOMPUTATION ################################
 
     # Precomputation
-    A = get_rbf_inner_products(basis, rbf_loc, tracked_moments, x_stop=v_cutoff)
-    Source = get_kernel_rbf_source(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=v_cutoff)
-    Sink = get_kernel_rbf_sink_precip(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=v_cutoff)
-    (c_inject, Inject) = get_basis_projection(basis, rbf_loc, A, tracked_moments, inject_rate_fn, v_cutoff)
-    println(c_inject, Inject)
+    A = get_rbf_inner_products(basis, rbf_loc, tracked_moments)
+    Source = get_kernel_rbf_source(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin)
+    Sink = get_kernel_rbf_sink_precip(basis, rbf_loc, tracked_moments, kernel_func, xstart=vmin, xstop=vmax)
+    (c_inject, Inject) = get_basis_projection(basis, rbf_loc, A, tracked_moments, inject_rate_fn, vmax)
     J = get_mass_cons_term(basis, xstart = vmin, xstop = vmax)
 
     # INITIAL CONDITION
@@ -87,13 +94,13 @@ function main()
     t_coll = sol.t
 
     # track the moments
-    basis_mom_withsink = vcat(get_moment(basis, 0.0, xstart=vmin, xstop=v_cutoff)', get_moment(basis, 1.0, xstart=vmin, xstop=v_cutoff)', get_moment(basis, 2.0, xstart=vmin, xstop=v_cutoff)')
+    basis_mom = vcat(get_moment(basis, 0.0, xstart=vmin, xstop=vmax)', get_moment(basis, 1.0, xstart=vmin, xstop=vmax)', get_moment(basis, 2.0, xstart=vmin, xstop=vmax)')
     c_coll = zeros(FT, length(t_coll), Nb)
     for (i,t) in enumerate(t_coll)
       nj_t = sol(t)
       c_coll[i,:] = get_constants_vec(nj_t, A)
     end
-    mom_coll = c_coll*basis_mom_withsink'
+    mom_coll = c_coll*basis_mom'
     println("times = ", t_coll)
     println("c_init = ", c_coll[1,:])
     println("c_final = ", c_coll[end,:])
@@ -109,14 +116,14 @@ function main()
     end
 
     #plot_nv_result(vmin*0.1, 1000.0, basis, c_coll[1,:], plot_exact=true, n_v_init=n_v_init, casename=casename)
-    plot_nv_result(vmin*0.1, 1000.0, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
-    plot_nr_result(rmin*0.1, rmax, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
-    plot_moments(t_coll, mom_coll, casename = casename)
-    plot_precip(t_precip, m_precip, v_cutoff, casename = casename)
+    #plot_nv_result(vmin*0.1, 1000.0, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
+    #plot_nr_result(rmin*0.1, rmax, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
+    # plot_moments(t_coll, mom_coll, casename = casename)
+    # plot_precip(t_precip, m_precip, v_cutoff, casename = casename)
 
     # output results to file
     open(string(casename,"results.txt"),"w") do file
-      write(file, string("means = ", rbf_loc,"\n"))
+      write(file, string("means = ", log.(rbf_loc),"\n"))
       write(file,string("stddevs = ", rbf_shapes,"\n"))
       write(file,"")
       write(file,string("times = ", t_coll,"\n"))

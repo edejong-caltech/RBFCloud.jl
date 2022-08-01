@@ -1,4 +1,4 @@
-""" collision-coalescence only with golovin kernel and bimdoal DSD"""
+""" collision-coalescence only with golovin kernel """
 
 using Plots
 using RBFCloud.BasisFunctions
@@ -8,20 +8,21 @@ using DifferentialEquations
 
 function main()
     ############################ SETUP ###################################
-    casename = "examples/golovin_bimodal_16_"
+    casename = "examples/golovin8_bimodal"
 
     # Numerical parameters
     FT = Float64
     tspan = (0.0, 4*3600.0)
 
     # basis setup 
-    Nb = 16
-    rmax  = 50.0
-    rmin  = 1.0
-    vmin = 8*rmin^3
-    vmax = rmax^3
+    Nb = 8
+    rmax  = 200.0
+    rmin  = 2.0
+    vmin = 4/3*pi*rmin^3
+    vmax = 4/3*pi*rmax^3
 
-    v_cutoff = 1e3
+    r_cutoff = 25
+    v_cutoff = 4/3*pi*r_cutoff^3
 
     # Physical parameters: Kernel
     a = 0.0
@@ -34,20 +35,20 @@ function main()
     inject_rate = 0
     θ_r   = 3             # radius scale factor: µm
     k     = 3             # shape factor for particle size distribution 
-
+  
     # initial/injection distribution in volume: gamma distribution in radius, number per cm^3
-    #### INTIIAL DISTRIBUTION: TWO MODES ####
-    θ_v_1 = 100.0
-    N_1   = 100.0
+    #### INITIAL DISTRIBUTION: TWO MODES ####
+    θ_v_1 = 1000.0
+    N_1   = 10.0
     k_1   = 4
-    θ_v_2 = 15.0
+    θ_v_2 = 200.0
     N_2   = 100.0
     k_2   = 2
     r = v->(3/4/pi*v)^(1/3)
     mode1_v = v -> N_1*v^(k_1-1)/θ_v_1^k_1 * exp(-v/θ_v_1) / gamma(k_1)
     mode2_v = v -> N_2*v^(k_2-1)/θ_v_2^k_2 * exp(-v/θ_v_2) / gamma(k_2)
     n_v_init = v->(mode1_v(v) + mode2_v(v))
-
+    
     n_v_inject = v -> (r(v))^(k-1)/θ_r^k * exp(-r(v)/θ_r) / gamma(k)
     
     # lin-spaced log compact rbf
@@ -115,14 +116,14 @@ function main()
     end
 
     #plot_nv_result(vmin*0.1, 1000.0, basis, c_coll[1,:], plot_exact=true, n_v_init=n_v_init, casename=casename)
-    plot_nv_result(vmin*0.1, 1000.0, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
-    plot_nr_result(rmin*0.1, rmax, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
+    #plot_nv_result(vmin*0.1, 1000.0, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
+    #plot_nr_result(rmin*0.1, rmax, basis, t_coll, c_coll, plot_exact=true, n_v_init=n_v_init, log_scale=true, casename = casename)
     plot_moments(t_coll, mom_coll, casename = casename)
     plot_precip(t_precip, m_precip, v_cutoff, casename = casename)
 
     # output results to file
     open(string(casename,"results.txt"),"w") do file
-      write(file, string("means = ", rbf_loc,"\n"))
+      write(file, string("means = ", log.(rbf_loc),"\n"))
       write(file,string("stddevs = ", rbf_shapes,"\n"))
       write(file,"")
       write(file,string("times = ", t_coll,"\n"))

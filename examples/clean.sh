@@ -1,2 +1,2 @@
 rm *.png
-rm *.txt
+#rm *.txt

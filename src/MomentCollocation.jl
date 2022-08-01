@@ -255,9 +255,10 @@ function get_basis_projection(basis::Array{RBF,1}, rbf_locs::Array{FT}, A::Array
     Nb = length(basis)
     Nmom = length(moment_list)
     f0 = zeros(FT, Nb*Nmom)
-    f0[1:Nb] = unprojected_fn.(rbf_locs)
+    n0 = zeros(FT, N)
+    n0[1:Nb] = unprojected_fn.(rbf_locs)
     for (l,moment_order) in enumerate(moment_list)
-        f0[(l-1)*Nb+1:l*Nb] = f0[(l-1)*Nb+1:l*Nb] .* rbf_locs.^moment_order
+        f0[(l-1)*Nb+1:l*Nb] = n0[1:Nb] .* rbf_locs.^moment_order
     end
     # project the function onto the basis space, with mass conservation imposed
     J = get_mass_cons_term(basis, xstart = 0.0, xstop = xmax)
@@ -270,9 +271,10 @@ function get_basis_projection(basis::Array{RBF,1}, rbf_locs::Array{FT}, A::Array
         evaluate_rbf(basis, c_fn, x)
     end
     f0_proj = zeros(FT, Nb*Nmom)
-    f0_proj[1:Nb] = f_projected.(rbf_locs)
+    n0_proj = zeros(FT, Nb)
+    n0_proj[1:Nb] = f_projected.(rbf_locs)
     for (l,moment_order) in enumerate(moment_list)
-        f0_proj[(l-1)*Nb+1:l*Nb] = f0_proj[(l-1)*Nb+1:l*Nb] .* rbf_locs.^moment_order
+        f0_proj[(l-1)*Nb+1:l*Nb] = n0_proj[1:Nb] .* rbf_locs.^moment_order
     end
 
     return (c_fn, f0_proj)
